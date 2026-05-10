@@ -1,0 +1,73 @@
+name: Upload Roblox Place
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Upload with curl (XML)
+      id: curl-xml
+      continue-on-error: true
+      run: |
+        curl -v -L -X POST \
+          "https://apis.roblox.com/universes/v1/${{ vars.UNIVERSE_ID }}/places/${{ vars.PLACE_ID }}/versions?versionType=Published" \
+          -H "x-api-key: ${{ secrets.ROBLOX_API_KEY }}" \
+          -H "Content-Type: application/xml" \
+          --data-binary @place.rbxlx || echo "CURL XML failed"
+      env:
+        ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+
+    - name: Upload with curl (Octet-Stream)
+      id: curl-octet
+      continue-on-error: true
+      run: |
+        curl -v -L -X POST \
+          "https://apis.roblox.com/universes/v1/${{ vars.UNIVERSE_ID }}/places/${{ vars.PLACE_ID }}/versions?versionType=Published" \
+          -H "x-api-key: ${{ secrets.ROBLOX_API_KEY }}" \
+          -H "Content-Type: application/octet-stream" \
+          --data-binary @place.rbxlx || echo "CURL Octet failed"
+      env:
+        ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+
+    - name: Upload with Python requests
+      id: python-upload
+      continue-on-error: true
+      run: |
+        python3 -c '
+        import requests, os, sys
+        api_key = os.getenv("ROBLOX_API_KEY")
+        universe = os.getenv("UNIVERSE_ID")
+        place = os.getenv("PLACE_ID")
+        with open("place.rbxlx", "rb") as f:
+            data = f.read()
+        for ct in ["application/xml", "application/octet-stream"]:
+            try:
+                r = requests.post(
+                    f"https://apis.roblox.com/universes/v1/{universe}/places/{place}/versions?versionType=Published",
+                    headers={"x-api-key": api_key, "Content-Type": ct},
+                    data=data
+                )
+                print(f"Status: {r.status_code}")
+                print(r.text)
+                if r.ok:
+                    print("SUCCESS!")
+                    sys.exit(0)
+            except Exception as e:
+                print(e)
+        print("All methods failed")
+        ' || echo "Python failed"
+      env:
+        ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+        UNIVERSE_ID: ${{ vars.UNIVERSE_ID }}
+        PLACE_ID: ${{ vars.PLACE_ID }}
+
+    - name: Summary
+      run: echo "Tried multiple upload methods. Check logs above."
